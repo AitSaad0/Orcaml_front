@@ -2,7 +2,7 @@
 
 import { LayoutDashboard, Settings, User, Folder, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 const projects = [
@@ -20,6 +20,7 @@ const projects = [
 
 export default function SideBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [openProject, setOpenProject] = useState<string | null>(null);
 
   return (
@@ -43,7 +44,10 @@ export default function SideBar() {
           <div key={project.id}>
             {/* Project Row */}
             <button
-              onClick={() => setOpenProject(openProject === project.id ? null : project.id)}
+              onClick={() => {
+                setOpenProject(openProject === project.id ? null : project.id);
+                router.push(`/projects/${project.id}`);
+              }}
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               {openProject === project.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
