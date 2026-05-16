@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "next-themes";
-import NavBar from "@/components/ui/NavBar";
-import SideBar from "@/components/ui/SideBar";
+import { AuthProvider } from "@/context/auth/AuthContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,16 +14,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
+          <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>
       </body>
-    </html>   
+    </html>
   );
 }
