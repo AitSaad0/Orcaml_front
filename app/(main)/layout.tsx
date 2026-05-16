@@ -35,14 +35,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   if (!token) return null;
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-screen">
       {/* NavBar en haut */}
       <NavBar page="projects" />
 
       {/* SideBar + contenu */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
         <SideBar />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto flex flex-col">
           {children}
         </main>
       </div>

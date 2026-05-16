@@ -1,105 +1,170 @@
 "use client";
 
-import { LayoutDashboard, Settings, User, Folder, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { LayoutDashboard, Settings, User, Folder, ChevronDown, ChevronRight, Plus, Box } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/context/auth/AuthContext";
+import { getProjects, Project } from "@/lib/api/project/api";
+import { getEnvironments, Environment } from "@/lib/api/environment/api";
+import { envCreatedEvent } from "@/lib/events";
+import CreateEnvironmentModal from "@/components/ui/environment/CreateEnvironmentModal";
 
-// TODO: replace with real user id from your auth session
 const CURRENT_USER_ID = "1";
-
-const projects = [
-  {
-    id: "1",
-    label: "Churn Prediction",
-    environments: ["ChurnV1", "ChurnV2"],
-  },
-  {
-    id: "2",
-    label: "Fraud Detection",
-    environments: ["FraudProd"],
-  },
-];
 
 export default function SideBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { token } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [openProject, setOpenProject] = useState<string | null>(null);
+  const [envsByProject, setEnvsByProject] = useState<Record<string, Environment[]>>({});
+  const [envModal, setEnvModal] = useState<{ open: boolean; projectId: string } | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    getProjects(token).then(setProjects).catch(console.error);
+  }, [token]);
+
+  function refreshEnvs(projectId: string) {
+    if (!token) return;
+    getEnvironments(token, projectId).then((envs) =>
+      setEnvsByProject((prev) => ({ ...prev, [projectId]: envs }))
+    );
+  }
+
+  // Listen for env created events from anywhere
+  useEffect(() => {
+    function handleEnvCreated(e: Event) {
+      const { projectId } = (e as CustomEvent).detail;
+      refreshEnvs(projectId);
+    }
+    window.addEventListener(envCreatedEvent, handleEnvCreated);
+    return () => window.removeEventListener(envCreatedEvent, handleEnvCreated);
+  }, [token]);
+
+  async function toggleProject(projectId: string) {
+    if (openProject === projectId) {
+      setOpenProject(null);
+      return;
+    }
+    setOpenProject(projectId);
+    router.push(`/projects/${projectId}`);
+    if (!envsByProject[projectId] && token) {
+      try {
+        const envs = await getEnvironments(token, projectId);
+        setEnvsByProject((prev) => ({ ...prev, [projectId]: envs }));
+      } catch {
+        setEnvsByProject((prev) => ({ ...prev, [projectId]: [] }));
+      }
+    }
+  }
 
   return (
-    <aside className="w-64 h-full border-r border-gray-200 dark:border-gray-700 flex flex-col justify-between">
-      
-      {/* Top */}
-      <div className="flex flex-col p-4 gap-1">
-        <Link
-          href="/dashboard"
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-            pathname === "/dashboard" ? "bg-gray-800 text-white" : ""
-          }`}
-        >
-          <LayoutDashboard size={16} />
-          Dashboard
-        </Link>
+    <>
+      <aside className="w-64 h-full border-r border-[var(--border)] bg-[var(--sidebar)] flex flex-col justify-between">
 
-        <p className="text-xs text-gray-400 px-3 mt-4 mb-1">PROJECTS</p>
+        {/* Top */}
+        <div className="flex flex-col p-3 gap-0.5 overflow-y-auto">
+          <Link
+            href="/dashboard"
+            className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-component)] text-sm transition-colors
+              ${pathname === "/dashboard"
+                ? "bg-[var(--primary)] text-white"
+                : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"}`}
+          >
+            <LayoutDashboard size={16} />
+            Dashboard
+          </Link>
 
-        {projects.map((project) => (
-          <div key={project.id}>
-            <button
-              onClick={() => {
-                setOpenProject(openProject === project.id ? null : project.id);
-                router.push(`/projects/${project.id}`);
-              }}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              {openProject === project.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <Folder size={16} />
-              {project.label}
-            </button>
+          <p className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase">
+            Projects
+          </p>
 
-            {openProject === project.id && (
-              <div className="flex flex-col ml-6 gap-1">
-                {project.environments.map((env) => (
-                  <Link
-                    key={env}
-                    href={`/projects/${project.id}/${env}`}
-                    className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  >
-                    • {env}
-                  </Link>
-                ))}
-                <button className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-gray-600">
-                  <Plus size={14} />
-                  Add Environment
+          {projects.map((project) => {
+            const isOpen = openProject === project.id;
+            const envs = envsByProject[project.id] ?? [];
+
+            return (
+              <div key={project.id}>
+                <button
+                  onClick={() => toggleProject(project.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-[var(--radius-component)] text-sm w-full transition-colors
+                    ${pathname.startsWith(`/projects/${project.id}`)
+                      ? "bg-[var(--sidebar-accent)] text-[var(--foreground)]"
+                      : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"}`}
+                >
+                  {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                  <Folder size={14} />
+                  <span className="truncate flex-1 text-left">{project.name}</span>
                 </button>
+
+                {isOpen && (
+                  <div className="flex flex-col ml-5 mt-0.5 gap-0.5 border-l border-[var(--border)] pl-2">
+                    {envs.map((env) => (
+                      <Link
+                        key={env.id}
+                        href={`/projects/${project.id}/environments/${env.id}`}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-component)] text-xs transition-colors
+                          ${pathname.includes(env.id)
+                            ? "text-[var(--primary)] bg-[var(--sidebar-accent)]"
+                            : "text-[var(--text-3)] hover:text-[var(--foreground)] hover:bg-[var(--sidebar-accent)]"}`}
+                      >
+                        <Box size={12} />
+                        <span className="truncate">{env.name}</span>
+                        <span className={`ml-auto shrink-0 w-1.5 h-1.5 rounded-full
+                          ${env.status === "active" ? "bg-[var(--success)]" : "bg-[var(--text-3)]"}`}
+                        />
+                      </Link>
+                    ))}
+                    <button
+                      onClick={() => setEnvModal({ open: true, projectId: project.id })}
+                      className="flex items-center gap-2 px-2 py-1.5 text-xs text-[var(--text-3)]
+                        hover:text-[var(--primary)] transition-colors rounded-[var(--radius-component)]"
+                    >
+                      <Plus size={12} />
+                      Add Environment
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
 
-      {/* Bottom */}
-      <div className="flex flex-col gap-1 p-4 border-t border-gray-200 dark:border-gray-700">
-        <Link
-          href={`/profile/${CURRENT_USER_ID}`}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-            pathname.startsWith("/profile") ? "bg-gray-800 text-white" : ""
-          }`}
-        >
-          <User size={16} />
-          Profile
-        </Link>
-        <Link
-          href="/settings"
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-            pathname === "/settings" ? "bg-gray-800 text-white" : ""
-          }`}
-        >
-          <Settings size={16} />
-          Settings
-        </Link>
-      </div>
+        {/* Bottom */}
+        <div className="flex flex-col gap-0.5 p-3 border-t border-[var(--border)]">
+          <Link
+            href={`/profile/${CURRENT_USER_ID}`}
+            className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-component)] text-sm transition-colors
+              ${pathname.startsWith("/profile")
+                ? "bg-[var(--primary)] text-white"
+                : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"}`}
+          >
+            <User size={16} />
+            Profile
+          </Link>
+          <Link
+            href="/settings"
+            className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-component)] text-sm transition-colors
+              ${pathname === "/settings"
+                ? "bg-[var(--primary)] text-white"
+                : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"}`}
+          >
+            <Settings size={16} />
+            Settings
+          </Link>
+        </div>
+      </aside>
 
-    </aside>
+      {envModal?.open && (
+        <CreateEnvironmentModal
+          open={envModal.open}
+          projectId={envModal.projectId}
+          onClose={() => setEnvModal(null)}
+          onCreated={() => setEnvModal(null)}
+        />
+      )}
+    </>
   );
 }

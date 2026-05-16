@@ -1,85 +1,60 @@
-import { ChartLine } from "lucide-react";
-import StatsCard from "../../../../components/ui/StatsCard";
-import EnvironmentCard from "../../../../components/ui/EnvironmentCard";
-import CreateEnvironmentCard from "../../../../components/ui/CreateEnvironmentCard";
-import Projects from "@/components/sections/Projects";
+"use client";
 
-const projects = [
-    {
-        id: "1",
-        name: "Churn Prediction",
-        total_experiments: 24,
-        total_deployments: 3,
-        total_runs: 42
-    }, 
-    {
-        id: "2",
-        name: "Fraud Detection",
-        total_experiments: 12,
-        total_deployments: 1,
-        total_runs: 18
+import { useEffect, useState, useCallback } from "react";
+import { useAuth } from "@/context/auth/AuthContext";
+import Projects from "@/components/sections/project/Projects";
+import { getProjects, Project } from "@/lib/api/project/api";
+import { getEnvironments, Environment } from "@/lib/api/environment/api";
+
+export default function ProjectPage({ params }: { params: { projectId: string } }) {
+  const { token } = useAuth();
+  const [project, setProject] = useState<Project | null>(null);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!token) return;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(params.projectId)) {
+      setError("Invalid project URL — please select a project from the sidebar.");
+      setLoading(false);
+      return;
     }
-];
-
-const environments = [
-    {
-        project_id: "1",
-        environments: [
-            {
-            id: "env1",
-            name: "ChurnV1",
-            status: "inactive" as const,
-            target_column: "churn_flag",
-            task_type: "classification",
-            total_runs: 24,
-            deployments: 2
-            }, 
-            {
-            id: "env2",
-            name: "ChurnV2",
-            status: "active" as const,
-            target_column: "churn_flag",
-            task_type: "classification",
-            total_runs: 18,
-            deployments: 1
-            }
-        ]
-    },
-    {
-        project_id: "2",
-        environments: [
-            {
-                id: "env3",
-                name: "FraudProd",
-                status: "active" as const,
-                target_column: "is_fraud",
-                task_type: "classification",
-                total_runs: 18,
-                deployments: 1
-            }
-    ]
-    },    
-]
-
-
-
-
-export default function ProjectPage({params}: {params: {projectId: string}}) {
-    const project = projects.find(p => p.id === params.projectId);
-    const projectEnvironments = environments.find(e => e.project_id === params.projectId)?.environments || [];
-
-    if (!project) {
-        return <div className="p-8">Project not found</div>;
+    try {
+      setLoading(true);
+      const [projects, envs] = await Promise.all([
+        getProjects(token),
+        getEnvironments(token, params.projectId),
+      ]);
+      const found = projects.find((p) => p.id === params.projectId);
+      if (!found) throw new Error("Project not found");
+      setProject(found);
+      setEnvironments(envs);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
+  }, [token, params.projectId]);
 
-    return (
-        <Projects 
-            name={project.name}
-            totalExperiments={project.total_experiments}
-            totalDeployments={project.total_deployments}
-            totalRuns={project.total_runs}
-            environments={projectEnvironments}
-        />
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-    );
+  if (loading) return <div className="flex-1 flex items-center justify-center text-[var(--text-3)] text-sm">Loading...</div>;
+  if (error) return <div className="flex-1 flex items-center justify-center text-[var(--destructive)] text-sm">{error}</div>;
+  if (!project) return <div className="flex-1 flex items-center justify-center text-[var(--text-3)] text-sm">Project not found</div>;
+
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      <Projects
+        name={project.name}
+        projectId={params.projectId}
+        totalExperiments={0}
+        totalDeployments={0}
+        totalRuns={0}
+        environments={environments}
+        onRefresh={fetchData}         // 👈 pass refresh up
+      />
+    </div>
+  );
 }
