@@ -5,6 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
+// TODO: replace with real user id from your auth session
+const CURRENT_USER_ID = "1";
+
 const projects = [
   {
     id: "1",
@@ -42,7 +45,6 @@ export default function SideBar() {
 
         {projects.map((project) => (
           <div key={project.id}>
-            {/* Project Row */}
             <button
               onClick={() => {
                 setOpenProject(openProject === project.id ? null : project.id);
@@ -55,7 +57,6 @@ export default function SideBar() {
               {project.label}
             </button>
 
-            {/* Environments */}
             {openProject === project.id && (
               <div className="flex flex-col ml-6 gap-1">
                 {project.environments.map((env) => (
@@ -80,9 +81,9 @@ export default function SideBar() {
       {/* Bottom */}
       <div className="flex flex-col gap-1 p-4 border-t border-gray-200 dark:border-gray-700">
         <Link
-          href="/profile"
+          href={`/profile/${CURRENT_USER_ID}`}
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-            pathname === "/profile" ? "bg-gray-800 text-white" : ""
+            pathname.startsWith("/profile") ? "bg-gray-800 text-white" : ""
           }`}
         >
           <User size={16} />
