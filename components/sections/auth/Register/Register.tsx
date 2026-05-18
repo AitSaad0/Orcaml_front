@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/context/auth/AuthContext";
-import { registerUser, loginUser } from "@/lib/api/auth/auth";
+import { registerUser, loginUser } from "@/lib/api/auth";
 
 function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters";
