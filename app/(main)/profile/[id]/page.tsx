@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { User, Shield, BarChart2, KeyRound, Bell } from "lucide-react";
-import PersonalInfo  from "@/components/ui/profile/PersonalInformation";
-import Security      from "@/components/ui/profile/Security"
-import Statistics    from "@/components/ui/profile/Statistics";
-import ApiKeys       from "@/components/ui/profile/ApiKeys";
-import Preferences   from "@/components/ui/profile/Preferences";
-import { PersonalInfoData } from "@/interfaces/profile/PersonalInfoData";
+import { useState, useEffect } from "react";
+import { User, Shield, BarChart2, KeyRound, Bell, Loader2 } from "lucide-react";
+import PersonalInformation from "@/components/ui/profile/PersonalInformation";
+import Security            from "@/components/ui/profile/Security";
+import Statistics          from "@/components/ui/profile/Statistics";
+import ApiKeys             from "@/components/ui/profile/ApiKeys";
+import Preferences         from "@/components/ui/profile/Preferences";
+import { useAuth }         from "@/context/auth/AuthContext";
+import { getMe, UserResponse } from "@/lib/api/users/api";
 
 type TabId = "personal" | "security" | "statistics" | "api-keys" | "preferences";
 
@@ -25,15 +26,19 @@ const tabs: Tab[] = [
   { id: "preferences", label: "Preferences",   icon: <Bell size={16} /> },
 ];
 
-const profileData: PersonalInfoData = {
-  id: "1",
-  firstName: "Saad",
-  lastName: "Amzazi",
-  email: "saad@example.com",
-};
-
 export default function ProfilePage() {
+  const { token } = useAuth();
+
   const [activeTab, setActiveTab] = useState<TabId>("personal");
+  const [user,      setUser]      = useState<UserResponse | null>(null);
+  const [loading,   setLoading]   = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    getMe(token)
+      .then(setUser)
+      .finally(() => setLoading(false));
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-[var(--background)] p-6 md:p-10">
@@ -64,11 +69,21 @@ export default function ProfilePage() {
         </nav>
 
         <div className="flex-1 min-w-0">
-          {activeTab === "personal"    && <PersonalInfo {...profileData} />}
-          {activeTab === "security"    && <Security />}
-          {activeTab === "statistics"  && <Statistics />}
-          {activeTab === "api-keys"    && <ApiKeys />}
-          {activeTab === "preferences" && <Preferences />}
+          {loading && (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={20} className="animate-spin text-[var(--text-3)]" />
+            </div>
+          )}
+
+          {!loading && user && (
+            <>
+              {activeTab === "personal"    && <PersonalInformation user={user} onUpdate={setUser} />}
+              {activeTab === "security"    && <Security />}
+              {activeTab === "statistics"  && <Statistics />}
+              {activeTab === "api-keys"    && <ApiKeys />}
+              {activeTab === "preferences" && <Preferences />}
+            </>
+          )}
         </div>
       </div>
     </div>

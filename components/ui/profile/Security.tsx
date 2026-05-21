@@ -1,31 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { SaveStatus } from "@/types/profile/SaveStatus";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/auth/AuthContext";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type SaveStatus = "idle" | "saving" | "success" | "error";
 
 type PasswordForm = {
   current: string;
-  next: string;
+  next:    string;
   confirm: string;
 };
 
-type Session = {
-  id: string;
-  device: string;
-  location: string;
-  active: boolean;
-};
-
-const MOCK_SESSIONS: Session[] = [
-  { id: "1", device: "Chrome on MacOS",  location: "San Francisco, US", active: true },
-  { id: "2", device: "Safari on iPhone", location: "San Francisco, US", active: false },
-];
+// ─── Button config ────────────────────────────────────────────────────────────
 
 const buttonClass: Record<SaveStatus, string> = {
   idle:    "bg-[var(--primary)] hover:bg-[var(--accent-3)] cursor-pointer",
   saving:  "bg-[var(--accent-2)] cursor-not-allowed",
-  success: "bg-[var(--success)] cursor-default",
-  error:   "bg-[var(--destructive)] cursor-default",
+  success: "bg-green-600 cursor-default",
+  error:   "bg-red-600 cursor-default",
 };
 
 const buttonLabel: Record<SaveStatus, string> = {
@@ -35,7 +30,17 @@ const buttonLabel: Record<SaveStatus, string> = {
   error:   "Failed ✗",
 };
 
-function PasswordInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+// ─── PasswordInput ────────────────────────────────────────────────────────────
+
+function PasswordInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-[13px] font-medium text-[var(--text-2)]">{label}</label>
@@ -52,41 +57,125 @@ function PasswordInput({ label, value, onChange }: { label: string; value: strin
   );
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function Security() {
-  const [form, setForm] = useState<PasswordForm>({ current: "", next: "", confirm: "" });
+  const { token, logout } = useAuth();
+  const router = useRouter();
+
+  const [form,   setForm]   = useState<PasswordForm>({ current: "", next: "", confirm: "" });
   const [status, setStatus] = useState<SaveStatus>("idle");
-  const [twoFA, setTwoFA] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [error,  setError]  = useState<string | null>(null);
+  const [twoFA,  setTwoFA]  = useState(false);
+
+  const isDirty = form.current !== "" && form.next !== "" && form.confirm !== "";
 
   const handleSave = async () => {
-    setStatus("saving");
-    await new Promise((res) => setTimeout(res, 900));
-    setStatus("success");
-    setTimeout(() => setStatus("idle"), 2200);
-  };
+    if (!token || !isDirty) return;
 
-  const revokeSession = (id: string) =>
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    // Validation côté client
+    if (form.next !== form.confirm) {
+      setError("New passwords do not match");
+      return;
+    }
+    if (form.next.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    if (!form.next.split("").some((c) => c >= "A" && c <= "Z")) {
+      setError("Password must contain at least one uppercase letter");
+      return;
+    }
+    if (!form.next.split("").some((c) => c >= "0" && c <= "9")) {
+      setError("Password must contain at least one digit");
+      return;
+    }
+
+    setError(null);
+    setStatus("saving");
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/users/me/password`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            current_password: form.current,
+            new_password:     form.next,
+            confirm_password: form.confirm,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to update password");
+      }
+
+      setStatus("success");
+
+      // Forcer logout après 1.5s
+      setTimeout(() => {
+        logout();
+        router.push("/auth/login");
+      }, 1500);
+
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "An error occurred");
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 2200);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 w-full">
+
       {/* Change Password */}
       <div className="bg-[var(--card)] rounded-[var(--radius-card)] p-8">
         <h2 className="text-lg font-semibold text-[var(--card-foreground)] mb-7 tracking-tight">
           Change Password
         </h2>
+
         <div className="flex flex-col gap-5">
-          <PasswordInput label="Current Password" value={form.current} onChange={(v) => setForm((p) => ({ ...p, current: v }))} />
-          <PasswordInput label="New Password"      value={form.next}    onChange={(v) => setForm((p) => ({ ...p, next: v }))} />
-          <PasswordInput label="Confirm New Password" value={form.confirm} onChange={(v) => setForm((p) => ({ ...p, confirm: v }))} />
+          <PasswordInput
+            label="Current Password"
+            value={form.current}
+            onChange={(v) => setForm((p) => ({ ...p, current: v }))}
+          />
+          <PasswordInput
+            label="New Password"
+            value={form.next}
+            onChange={(v) => setForm((p) => ({ ...p, next: v }))}
+          />
+          <PasswordInput
+            label="Confirm New Password"
+            value={form.confirm}
+            onChange={(v) => setForm((p) => ({ ...p, confirm: v }))}
+          />
         </div>
+
+        {error && (
+          <p className="mt-4 text-xs font-medium text-red-500">{error}</p>
+        )}
+
+        {status === "success" && (
+          <p className="mt-4 text-xs font-medium text-green-600">
+            Password updated — redirecting to login...
+          </p>
+        )}
+
         <div className="mt-7">
           <button
             onClick={handleSave}
-            disabled={status === "saving"}
+            disabled={status === "saving" || !isDirty}
             className={`px-5 py-2.5 rounded-[var(--radius-component)]
-              text-sm font-semibold text-[var(--primary-foreground)]
-              transition-all duration-200 ${buttonClass[status]}`}
+              text-sm font-semibold text-white transition-all duration-200
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${buttonClass[status]}`}
           >
             {buttonLabel[status]}
           </button>
@@ -108,44 +197,19 @@ export default function Security() {
             className={`relative w-11 h-6 rounded-full transition-colors duration-200
               ${twoFA ? "bg-[var(--primary)]" : "bg-[var(--bg-4)]"}`}
           >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow
-              transition-transform duration-200 ${twoFA ? "translate-x-5" : "translate-x-0"}`}
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow
+                transition-transform duration-200 ${twoFA ? "translate-x-5" : "translate-x-0"}`}
             />
           </button>
         </div>
+        {twoFA && (
+          <p className="mt-4 text-xs text-[var(--text-3)]">
+            2FA is not yet implemented — coming soon.
+          </p>
+        )}
       </div>
 
-      {/* Active Sessions */}
-      <div className="bg-[var(--card)] rounded-[var(--radius-card)] p-8">
-        <h2 className="text-lg font-semibold text-[var(--card-foreground)] mb-6 tracking-tight">
-          Active Sessions
-        </h2>
-        <div className="flex flex-col gap-3">
-          {sessions.map((session) => (
-            <div key={session.id}
-              className="flex items-center justify-between p-4 rounded-[var(--radius-component)] bg-[var(--bg-2)] border border-[var(--border)]"
-            >
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">{session.device}</p>
-                <p className="text-xs text-[var(--text-3)] mt-0.5">{session.location}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {session.active && (
-                  <span className="text-xs font-medium text-[var(--success)]">Active</span>
-                )}
-                <button
-                  onClick={() => revokeSession(session.id)}
-                  className="px-3 py-1.5 rounded-[var(--radius-component)] text-xs font-medium
-                    border border-[var(--border)] text-[var(--text-2)]
-                    hover:border-[var(--destructive)] hover:text-[var(--destructive)] transition-colors"
-                >
-                  Revoke
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
-} 
+}
