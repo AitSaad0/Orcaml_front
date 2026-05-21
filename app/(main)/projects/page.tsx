@@ -6,7 +6,7 @@ import { getProjects, Project } from "@/lib/api/project/api";
 import { Folder, Plus, AlertCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import CreateProjectModal from "@/components/ui/project/CreateProjectModal";
-
+import { getMe, UserResponse } from "@/lib/api/auth/auth";
 export default function ProjectsPage() {
   const { token } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);

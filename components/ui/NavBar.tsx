@@ -27,6 +27,7 @@ export default function NavBar({ page }: NavBarProps) {
       {/* ── GAUCHE : logo + page ── */}
      {/* ── GAUCHE : logo seul ── */}
 <div className="flex items-center">
+  
   <h1 className="text-xl font-bold text-gray-900 dark:text-white">OrcaML</h1>
 </div>
 
