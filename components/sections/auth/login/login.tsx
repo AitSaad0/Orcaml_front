@@ -28,7 +28,7 @@ export default function Login() {
       await login(token.access_token);
 
       // Redirige vers la page demandée avant le login, sinon /projects par défaut
-      const from = searchParams.get("from") ?? "/projects";
+      const from = searchParams.get("from") ?? "/dashboard";
       router.push(from);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue");
