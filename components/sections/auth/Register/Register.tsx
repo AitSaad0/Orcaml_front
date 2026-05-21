@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useAuth } from "@/context/auth/AuthContext";
-import { registerUser, loginUser } from "@/lib/api/auth/auth";
+import { registerUser } from "@/lib/api/auth/auth";
 
 function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters";
@@ -15,7 +14,6 @@ function validatePassword(password: string): string | null {
 }
 
 export default function Register() {
-  const { login } = useAuth();
   const router = useRouter();
 
   const [fullName, setFullName] = useState("");
@@ -40,10 +38,7 @@ export default function Register() {
         full_name: fullName || undefined,
       });
 
-      const token = await loginUser({ email, password });
-      await login(token.access_token);
-
-      router.push("/");
+     router.push("/auth/login");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
