@@ -7,11 +7,19 @@ import { useAuth } from "@/context/auth/AuthContext";
 import EnvironmentPageWrapper from "@/components/ui/environment/EnvironmentPageWrapper";
 import DeploymentStatsBar from "@/components/ui/deployments/DeploymentStatsBar";
 import DeploymentCard from "@/components/ui/deployments/DeploymentCard";
+import DeployModelModal from "@/components/ui/deployments/DeployModelModal";
+import PredictModal from "@/components/ui/deployments/PredictModal";
+import LogsModal from "@/components/ui/deployments/LogsModal";
 import {
   listDeployments,
   undeployModel,
   Deployment,
 } from "@/lib/api/deployment/api";
+
+interface ActiveModal {
+  deploymentId: string;
+  algorithm: string;
+}
 
 export default function DeploymentsPage({
   params,
@@ -22,6 +30,9 @@ export default function DeploymentsPage({
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deployModal, setDeployModal] = useState(false);
+  const [predictModal, setPredictModal] = useState<ActiveModal | null>(null);
+  const [logsModal, setLogsModal] = useState<ActiveModal | null>(null);
 
   const fetchDeployments = useCallback(async () => {
     if (!token) return;
@@ -51,9 +62,9 @@ export default function DeploymentsPage({
     }
   }
 
-  const activeCount    = deployments.filter((d) => d.status === "ACTIVE").length;
-  const totalRequests  = deployments.reduce((sum, d) => sum + d.total_calls, 0);
-  const avgLatency     = (() => {
+  const activeCount   = deployments.filter((d) => d.status === "ACTIVE").length;
+  const totalRequests = deployments.reduce((sum, d) => sum + d.total_calls, 0);
+  const avgLatency    = (() => {
     const active = deployments.filter((d) => d.avg_latency_ms != null);
     if (active.length === 0) return "—";
     const avg = active.reduce((sum, d) => sum + d.avg_latency_ms!, 0) / active.length;
@@ -70,7 +81,10 @@ export default function DeploymentsPage({
             Deploy and manage production models
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity">
+        <button
+          onClick={() => setDeployModal(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
+        >
           <Rocket size={15} />
           Deploy Model
         </button>
@@ -98,10 +112,7 @@ export default function DeploymentsPage({
       {loading && (
         <div className="flex flex-col gap-4 mt-6">
           {[1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-40 rounded-xl bg-muted/40 animate-pulse"
-            />
+            <div key={i} className="h-40 rounded-xl bg-muted/40 animate-pulse" />
           ))}
         </div>
       )}
@@ -139,8 +150,8 @@ export default function DeploymentsPage({
                       ? new Date(d.deployed_at).toLocaleDateString()
                       : null,
                   }}
-                  onPredict={(id) => console.log("predict", id)}
-                  onLogs={(id) => console.log("logs", id)}
+                  onPredict={(id) => setPredictModal({ deploymentId: id, algorithm: d.model.algorithm })}
+                  onLogs={(id) => setLogsModal({ deploymentId: id, algorithm: d.model.algorithm })}
                   onUndeploy={handleUndeploy}
                 />
               </motion.div>
@@ -148,6 +159,30 @@ export default function DeploymentsPage({
           )}
         </div>
       )}
+
+      {/* Modals */}
+      <DeployModelModal
+        open={deployModal}
+        environmentId={params.environmentId}
+        onClose={() => setDeployModal(false)}
+        onDeployed={fetchDeployments}
+      />
+
+      <PredictModal
+        open={!!predictModal}
+        environmentId={params.environmentId}
+        deploymentId={predictModal?.deploymentId ?? ""}
+        algorithm={predictModal?.algorithm ?? ""}
+        onClose={() => setPredictModal(null)}
+      />
+
+      <LogsModal
+        open={!!logsModal}
+        environmentId={params.environmentId}
+        deploymentId={logsModal?.deploymentId ?? ""}
+        algorithm={logsModal?.algorithm ?? ""}
+        onClose={() => setLogsModal(null)}
+      />
     </EnvironmentPageWrapper>
   );
 }
