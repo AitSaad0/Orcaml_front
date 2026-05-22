@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { X, Loader2, Box } from "lucide-react";
 import { useAuth } from "@/context/auth/AuthContext";
-import { emitEnvCreated } from "@/lib/events";
-
+import useEnvStore from "@/store/useEnvStore"; // 👈 replaced emitEnvCreated import
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -25,6 +24,8 @@ export default function CreateEnvironmentModal({ open, projectId, onClose, onCre
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const notifyEnvCreated = useEnvStore((s) => s.notifyEnvCreated) // 👈 get action from store
+
   if (!open) return null;
 
   async function handleSubmit() {
@@ -43,22 +44,22 @@ export default function CreateEnvironmentModal({ open, projectId, onClose, onCre
           name: name.trim(),
           target_column: targetColumn.trim(),
           task_type: taskType,
-          status: "pending",  
+          status: "pending",
         }),
       });
       if (!res.ok) {
-       const err = await res.json();
+        const err = await res.json();
         const detail = err.detail;
         const message =
-        typeof detail === "string"
+          typeof detail === "string"
             ? detail
             : Array.isArray(detail)
             ? detail.map((d: any) => d.msg).join(", ")
-            : "Failed to  create environment";
+            : "Failed to create environment";
         throw new Error(message);
       }
       setName(""); setTargetColumn(""); setTaskType("classification");
-      emitEnvCreated(projectId);
+      notifyEnvCreated(projectId); // 👈 replaced emitEnvCreated(projectId)
       onCreated();
     } catch (err: any) {
       setError(err.message);
@@ -96,7 +97,6 @@ export default function CreateEnvironmentModal({ open, projectId, onClose, onCre
 
         {/* Body */}
         <div className="px-6 py-5 flex flex-col gap-4">
-
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-[var(--text-2)]">
               Environment Name <span className="text-[var(--destructive)]">*</span>

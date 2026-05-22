@@ -6,7 +6,8 @@ import { getProjects, Project } from "@/lib/api/project/api";
 import { Folder, Plus, AlertCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import CreateProjectModal from "@/components/ui/project/CreateProjectModal";
-import { getMe, UserResponse } from "@/lib/api/auth/auth";
+import useEnvStore from "@/store/useEnvStore"; // 👈 added
+
 export default function ProjectsPage() {
   const { token } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -14,6 +15,7 @@ export default function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const notifyProjectCreated = useEnvStore((s) => s.notifyProjectCreated) // 👈 added
 
   useEffect(() => {
     if (!token) return;
@@ -22,6 +24,11 @@ export default function ProjectsPage() {
       .catch(() => setError("Failed to load projects."))
       .finally(() => setLoading(false));
   }, [token]);
+
+  function refreshProjects() {
+    if (!token) return;
+    getProjects(token).then(setProjects)
+  }
 
   return (
     <div className="flex-1 flex flex-col p-8 w-full">
@@ -33,7 +40,7 @@ export default function ProjectsPage() {
             Manage your ML projects and environments
           </p>
         </div>
-        <button 
+        <button
           onClick={() => setModalOpen(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-component)] text-sm font-medium
             bg-[var(--primary)] text-[var(--primary-foreground)]
@@ -120,10 +127,14 @@ export default function ProjectsPage() {
           ))}
         </div>
       )}
+
       <CreateProjectModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onCreated={() => getProjects(token!).then(setProjects)}
+        onCreated={() => {
+          refreshProjects()       // refresh the page list
+          notifyProjectCreated()  // 👈 notify sidebar
+        }}
       />
     </div>
   );

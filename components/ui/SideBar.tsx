@@ -7,8 +7,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/context/auth/AuthContext";
 import { getProjects, Project } from "@/lib/api/project/api";
 import { getEnvironments, Environment } from "@/lib/api/environment/api";
-import { envCreatedEvent } from "@/lib/events";
 import CreateEnvironmentModal from "@/components/ui/environment/CreateEnvironmentModal";
+import useEnvStore from "@/store/useEnvStore"; // 👈 removed envCreatedEvent import
 
 const CURRENT_USER_ID = "1";
 
@@ -21,10 +21,22 @@ export default function SideBar() {
   const [envsByProject, setEnvsByProject] = useState<Record<string, Environment[]>>({});
   const [envModal, setEnvModal] = useState<{ open: boolean; projectId: string } | null>(null);
 
+  const refreshProjectId = useEnvStore((s) => s.refreshProjectId) // 👈 watch store
+  const projectRefresh = useEnvStore((s) => s.projectRefresh)       // 👈 added
+const clearProjectRefresh = useEnvStore((s) => s.clearProjectRefresh) // 👈 added
+  const clearRefresh = useEnvStore((s) => s.clearRefresh)
+
   useEffect(() => {
     if (!token) return;
     getProjects(token).then(setProjects).catch(console.error);
   }, [token]);
+
+  useEffect(() => {
+  if (projectRefresh && token) {
+    getProjects(token).then(setProjects).catch(console.error)
+    clearProjectRefresh()
+  }
+}, [projectRefresh])
 
   function refreshEnvs(projectId: string) {
     if (!token) return;
@@ -33,15 +45,13 @@ export default function SideBar() {
     );
   }
 
-  // Listen for env created events from anywhere
+  // replaces window.addEventListener / window.removeEventListener
   useEffect(() => {
-    function handleEnvCreated(e: Event) {
-      const { projectId } = (e as CustomEvent).detail;
-      refreshEnvs(projectId);
+    if (refreshProjectId) {
+      refreshEnvs(refreshProjectId)
+      clearRefresh()
     }
-    window.addEventListener(envCreatedEvent, handleEnvCreated);
-    return () => window.removeEventListener(envCreatedEvent, handleEnvCreated);
-  }, [token]);
+  }, [refreshProjectId]) // 👈 runs automatically when store changes
 
   async function toggleProject(projectId: string) {
     if (openProject === projectId) {
@@ -77,9 +87,12 @@ export default function SideBar() {
             Dashboard
           </Link>
 
-          <p className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase">
+          <Link
+            href="/projects"
+            className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase block"
+          >
             Projects
-          </p>
+          </Link>
 
           {projects.map((project) => {
             const isOpen = openProject === project.id;
