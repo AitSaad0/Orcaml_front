@@ -49,7 +49,6 @@ export default function Projects({
             environmentId={String(env.id)}
             projectId={String(projectId)}
             name={env.name}
-            status={env.status === "active" ? "active" : "inactive"}
             targetColumn={env.target_column}
             taskType={env.task_type}
             totalRuns={env.total_runs}

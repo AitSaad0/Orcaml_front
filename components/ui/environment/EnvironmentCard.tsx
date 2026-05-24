@@ -2,12 +2,10 @@ import { MoreVertical } from "lucide-react";
 import { EnvironmentCardProps } from "../../../types/EnvironmentCardProps";
 import Link from "next/link";
 
-
 export default function EnvironmentCard({
   environmentId,
   projectId,
   name,
-  status,
   targetColumn,
   taskType,
   totalRuns,
@@ -17,24 +15,15 @@ export default function EnvironmentCard({
   return (
     <Link href={`/projects/${projectId}/environments/${environmentId}`}>
       <div className="bg-card text-card-foreground border border-border rounded-xl p-5 w-full flex flex-col gap-4 hover:border-primary transition-colors cursor-pointer">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 bg-success/10 text-success text-xs font-medium px-2.5 py-1 rounded-full w-fit">
-            <span
-              className={`w-1.5 h-1.5 rounded-full inline-block ${
-                status === "active" ? "bg-green-500" : "bg-red-500"
-              }`}
-            />
-            {status}
-          </div>
 
-          {showMenu && (
+        {/* Header */}
+        {showMenu && (
+          <div className="flex items-center justify-end">
             <button className="text-muted-foreground hover:text-foreground transition-colors">
               <MoreVertical size={16} />
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Name */}
         <h3 className="text-lg font-semibold">{name}</h3>

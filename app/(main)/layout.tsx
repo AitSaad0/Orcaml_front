@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth/AuthContext";
 import NavBar from "@/components/ui/NavBar";
-import SideBar from "@/components/ui/SideBar";
+import SideBar from "@/components/ui/sidebar/SideBar";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const { token, isLoading } = useAuth();
