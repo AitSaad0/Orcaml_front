@@ -1,242 +1,524 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/auth/AuthContext";
+
 import {
-  listDatasets,
+  getDatasetSchema,
   saveCleaningConfig,
+  getCleaningReview,
   triggerCleaning,
   getCleaningStatus,
+  getCleaningReport,
+  getCleanedPreview,
+  rollbackCleaning,
+  DatasetSchemaResponse,
   CleaningConfigCreate,
-  CleanedDatasetResponse,
-  MissingStrategy,
-  EncodingMethod,
-  ScalingMethod,
-  CleaningVersion,
-} from "@/lib/api/dataset/api";
-import { Play, Loader2, CheckCircle, XCircle } from "lucide-react";
+  ReviewResponse,
+  CleaningJobResponse,
+  CleaningReportResponse,
+  PreviewResponse,
+} from "@/lib/api/dataset/cleaning";
 
-const missingOptions: { value: MissingStrategy; label: string }[] = [
-  { value: "mean",   label: "Fill with mean" },
-  { value: "median", label: "Fill with median" },
-  { value: "mode",   label: "Fill with mode" },
-  { value: "drop",   label: "Drop rows" },
+import SchemaInspector     from "@/components/sections/cleaning/SchemaInspector";
+import ColumnConfigBuilder from "@/components/sections/cleaning/ColumnConfigBuilder";
+import ConfigReview        from "@/components/sections/cleaning/ConfigReview";
+import CleaningJobMonitor  from "@/components/sections/cleaning/CleaningJobMonitor";
+import ResultPanel         from "@/components/sections/cleaning/ResultPanel";
+
+import {
+  Database,
+  Settings2,
+  Eye,
+  Zap,
+  BarChart2,
+  AlertTriangle,
+  Loader2,
+  ArrowLeft,
+  ArrowRight,
+  Save,
+} from "lucide-react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEPPER STEPS DEFINITION
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STEPS = [
+  { id: 1, label: "Schema",  sublabel: "Inspect columns",    icon: <Database  size={16} /> },
+  { id: 2, label: "Config",  sublabel: "Per-column rules",   icon: <Settings2 size={16} /> },
+  { id: 3, label: "Review",  sublabel: "Confirm plan",       icon: <Eye       size={16} /> },
+  { id: 4, label: "Run",     sublabel: "Async cleaning job", icon: <Zap       size={16} /> },
+  { id: 5, label: "Results", sublabel: "Report & rollback",  icon: <BarChart2 size={16} /> },
 ];
 
-const encodingOptions: { value: EncodingMethod; label: string }[] = [
-  { value: "one_hot", label: "One-Hot Encoding" },
-  { value: "label",   label: "Label Encoding" },
-  { value: "ordinal", label: "Ordinal Encoding" },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// DEFAULT CLEANING CONFIG (v2.0)
+// ─────────────────────────────────────────────────────────────────────────────
 
-const scalingOptions: { value: ScalingMethod; label: string }[] = [
-  { value: "standard", label: "Standard Scaler" },
-  { value: "minmax",   label: "Min-Max Scaler" },
-  { value: "robust",   label: "Robust Scaler" },
-  { value: "none",     label: "No Scaling" },
-];
+const DEFAULT_CONFIG: CleaningConfigCreate = {
+  missing_strategy:  "MEDIAN",
+  remove_duplicates: true,
+  encoding_method:   "ONE_HOT",
+  scaling_method:    "STANDARD",
+  version:           "V2",
+  column_rules:      [],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEPPER UI
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Stepper({
+  current,
+  completed,
+}: {
+  current: number;
+  completed: Set<number>;
+}) {
+  return (
+    <div className="flex items-center gap-0 overflow-x-auto pb-1">
+      {STEPS.map((step, i) => {
+        const isActive = step.id === current;
+        const isDone   = completed.has(step.id);
+
+        return (
+          <div key={step.id} className="flex items-center">
+            {/* Step bubble */}
+            <div
+              className={`flex items-center gap-2.5 px-4 py-2 rounded-lg transition-all ${
+                isActive
+                  ? "bg-primary text-white"
+                  : isDone
+                  ? "bg-primary/20 text-primary"
+                  : "bg-card text-muted-foreground border border-border"
+              }`}
+            >
+              {/* Number / checkmark circle */}
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                  isActive ? "bg-white/20" : isDone ? "bg-primary/20" : "bg-muted"
+                }`}
+              >
+                {isDone && !isActive ? "✓" : step.id}
+              </div>
+
+              {/* Label + sublabel */}
+              <div className="hidden sm:flex flex-col leading-tight">
+                <span className="text-xs font-semibold">{step.label}</span>
+                <span
+                  className={`text-[10px] ${
+                    isActive ? "text-white/70" : "text-muted-foreground"
+                  }`}
+                >
+                  {step.sublabel}
+                </span>
+              </div>
+            </div>
+
+            {/* Connector line between steps */}
+            {i < STEPS.length - 1 && (
+              <div
+                className={`w-6 h-px mx-1 shrink-0 ${
+                  isDone ? "bg-primary" : "bg-border"
+                }`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function CleaningPage() {
   const { token } = useAuth();
-  const params = useParams();
-  const envId = params.environmentId as string;
+  const params    = useParams();
+  const envId     = params.environmentId as string;
 
-  const [hasDataset, setHasDataset] = useState(false);
-  const [config, setConfig] = useState<CleaningConfigCreate>({
-    missing_strategy:  "median",
-    remove_duplicates: true,
-    encoding_method:   "one_hot",
-    scaling_method:    "standard",
-    version:           "V1",
-  });
+  // ── Stepper state ──────────────────────────────────────────────────────────
+  const [step,      setStep]      = useState<number>(1);
+  const [completed, setCompleted] = useState<Set<number>>(new Set<number>());
 
-  const [saving,   setSaving]   = useState(false);
-  const [running,  setRunning]  = useState(false);
-  const [job,      setJob]      = useState<CleanedDatasetResponse | null>(null);
-  const [error,    setError]    = useState<string | null>(null);
+  function markDone(n: number) {
+    setCompleted((prev) => new Set<number>([...prev, n]));
+  }
 
-  // Check if env has a dataset
-  useEffect(() => {
+  // ── Phase 1 — Schema ───────────────────────────────────────────────────────
+  const [schema,        setSchema]        = useState<DatasetSchemaResponse | null>(null);
+  const [schemaLoading, setSchemaLoading] = useState<boolean>(false);
+  const [schemaError,   setSchemaError]   = useState<string | null>(null);
+
+  // Fetch schema automatically when the page loads
+  const fetchSchema = useCallback(async () => {
     if (!token) return;
-    listDatasets(token, envId)
-      .then((ds) => setHasDataset(ds.length > 0))
-      .catch(() => setHasDataset(false));
+    setSchemaLoading(true);
+    setSchemaError(null);
+    try {
+      const result = await getDatasetSchema(token, envId);
+      setSchema(result);
+      markDone(1);
+    } catch (e: any) {
+      setSchemaError(e.message);
+    } finally {
+      setSchemaLoading(false);
+    }
   }, [token, envId]);
 
-  // Poll status when job is running
   useEffect(() => {
-    if (!job || job.status === "DONE" || job.status === "FAILED") return;
-    const interval = setInterval(async () => {
-      if (!token) return;
-      const updated = await getCleaningStatus(token, envId, job.id);
-      setJob(updated);
-      if (updated.status === "DONE" || updated.status === "FAILED") {
-        clearInterval(interval);
-        setRunning(false);
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [job, token, envId]);
+    fetchSchema();
+  }, [fetchSchema]);
 
-  async function handleRunCleaning() {
+  // ── Phase 2 — Config ───────────────────────────────────────────────────────
+  const [config,    setConfig]    = useState<CleaningConfigCreate>(DEFAULT_CONFIG);
+  const [saving,    setSaving]    = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Called when user clicks "Save & Review" on step 2
+  async function handleSaveConfig() {
     if (!token) return;
-    setError(null);
+    setSaving(true);
+    setSaveError(null);
     try {
-      setSaving(true);
       await saveCleaningConfig(token, envId, config);
+      markDone(2);
+      setStep(3);
+      // Automatically fetch the review after saving
+      fetchReview();
+    } catch (e: any) {
+      setSaveError(e.message);
+    } finally {
       setSaving(false);
-      setRunning(true);
-      const result = await triggerCleaning(token, envId);
-      setJob(result);
-    } catch (err: any) {
-      setError(err.message);
-      setSaving(false);
-      setRunning(false);
     }
   }
 
+  // ── Phase 3 — Review ───────────────────────────────────────────────────────
+  const [review,        setReview]        = useState<ReviewResponse | null>(null);
+  const [reviewLoading, setReviewLoading] = useState<boolean>(false);
+  const [reviewError,   setReviewError]   = useState<string | null>(null);
+
+  async function fetchReview() {
+    if (!token) return;
+    setReviewLoading(true);
+    setReviewError(null);
+    try {
+      const result = await getCleaningReview(token, envId);
+      setReview(result);
+      markDone(3);
+    } catch (e: any) {
+      setReviewError(e.message);
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  // ── Phase 4 — Trigger + polling ────────────────────────────────────────────
+  const [job,          setJob]          = useState<CleaningJobResponse | null>(null);
+  const [triggering,   setTriggering]   = useState<boolean>(false);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+
+  // Ref keeps the interval ID so we can clear it when component unmounts
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Called from CleaningJobMonitor when user clicks "Start Cleaning Job"
+  async function handleTrigger() {
+    if (!token) return;
+    setTriggering(true);
+    setTriggerError(null);
+    try {
+      const result = await triggerCleaning(token, envId);
+      setJob(result);
+      markDone(4);
+      startPolling(result.id);
+    } catch (e: any) {
+      // FIX 1: error is now shown in the UI instead of silently dropped
+      setTriggerError(e.message);
+    } finally {
+      setTriggering(false);
+    }
+  }
+
+  // Poll the backend every 3 seconds until the job is done or failed
+  function startPolling(jobId: string) {
+    if (pollRef.current) clearInterval(pollRef.current);
+
+    pollRef.current = setInterval(async () => {
+      if (!token) return;
+      const updated = await getCleaningStatus(token, envId, jobId);
+      setJob(updated);
+
+      if (updated.status === "ready" || updated.status === "failed") {
+        clearInterval(pollRef.current!);
+
+        if (updated.status === "ready") {
+          markDone(4);
+          setStep(5);
+          // Automatically load report and preview when job finishes
+          fetchReport(jobId);
+          fetchPreview(jobId);
+        }
+      }
+    }, 3000);
+  }
+
+  // Clear polling interval when component unmounts
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // ── Phase 5 — Report ───────────────────────────────────────────────────────
+  const [report,        setReport]        = useState<CleaningReportResponse | null>(null);
+  const [reportLoading, setReportLoading] = useState<boolean>(false);
+  const [reportError,   setReportError]   = useState<string | null>(null);
+
+  async function fetchReport(jobId: string) {
+    if (!token) return;
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      const result = await getCleaningReport(token, envId, jobId);
+      setReport(result);
+    } catch (e: any) {
+      setReportError(e.message);
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  // ── Phase 5b — Preview ─────────────────────────────────────────────────────
+  const [preview,        setPreview]        = useState<PreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewError,   setPreviewError]   = useState<string | null>(null);
+
+  async function fetchPreview(jobId: string) {
+    if (!token) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const result = await getCleanedPreview(token, envId, jobId, 50);
+      setPreview(result);
+    } catch (e: any) {
+      setPreviewError(e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  // ── Phase 5c — Rollback ────────────────────────────────────────────────────
+  const [rolling,       setRolling]       = useState<boolean>(false);
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
+  const [rollbackMsg,   setRollbackMsg]   = useState<string | null>(null);
+
+  async function handleRollback() {
+    if (!token || !job) return;
+    setRolling(true);
+    setRollbackError(null);
+    try {
+      const result = await rollbackCleaning(token, envId, job.id);
+      setRollbackMsg(result.message);
+      // Reset everything so user can reconfigure from step 2
+      setJob(null);
+      setReport(null);
+      setPreview(null);
+      // FIX 2: properly typed Set with explicit generic
+      setCompleted(new Set<number>([1, 2]));
+      setStep(2);
+    } catch (e: any) {
+      setRollbackError(e.message);
+    } finally {
+      setRolling(false);
+    }
+  }
+
+  // ── Navigation logic ───────────────────────────────────────────────────────
+
+  // Determines if the Next button should be enabled
+  function canGoNext(): boolean {
+    if (step === 1) return !!schema;              // need schema loaded
+    if (step === 2) return true;                  // always can save
+    if (step === 3) return !!review;              // need review loaded
+    if (step === 4) return job?.status === "ready"; // need job done
+    return false;
+  }
+
+  // What happens when Next is clicked depends on the current step
+  function handleNext() {
+    if (step === 2) {
+      handleSaveConfig(); // saves config and moves to step 3
+      return;
+    }
+    if (step === 3) {
+      setStep(4); // just move to step 4
+      return;
+    }
+    setStep((s) => Math.min(s + 1, 5));
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  // Map each step number to its content component
+  const stepContent: Record<number, React.ReactNode> = {
+    1: (
+      <SchemaInspector
+        schema={schema}
+        loading={schemaLoading}
+        error={schemaError}
+      />
+    ),
+    2: (
+      <ColumnConfigBuilder
+        schema={schema}
+        config={config}
+        onChange={setConfig}
+      />
+    ),
+    3: (
+      <ConfigReview
+        review={review}
+        loading={reviewLoading}
+        error={reviewError}
+      />
+    ),
+    4: (
+      <CleaningJobMonitor
+        job={job}
+        onTrigger={handleTrigger}
+        triggering={triggering}
+      />
+    ),
+    5: (
+      <ResultPanel
+        report={report}
+        reportLoading={reportLoading}
+        reportError={reportError}
+        preview={preview}
+        previewLoading={previewLoading}
+        previewError={previewError}
+        onRollback={handleRollback}
+        rolling={rolling}
+        rollbackError={rollbackError}
+        rollbackMsg={rollbackMsg}
+      />
+    ),
+  };
+
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto">
+
+      {/* ── Page header ── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-bold">Data Preprocessing</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure data cleaning and transformation
+            Enhanced v2.0 — Per-column rules · Outlier detection · Rollback
           </p>
         </div>
-        <button
-          onClick={handleRunCleaning}
-          disabled={saving || running || !hasDataset}
-          className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving || running ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Play size={15} />
-          )}
-          {saving ? "Saving..." : running ? "Running..." : "Run Cleaning"}
-        </button>
+        <span className="px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-xs font-semibold">
+          Pipeline v2.0
+        </span>
       </div>
 
-      {!hasDataset && (
-        <div className="text-sm text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
-          ⚠️ No dataset uploaded yet. Please upload a dataset first.
-        </div>
-      )}
+      {/* ── Stepper ── */}
+      <Stepper current={step} completed={completed} />
 
-      {error && (
-        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3">
-          {error}
-        </div>
-      )}
+      {/* ── Step card ── */}
+      <div className="bg-card border border-border rounded-xl shadow-sm">
 
-      {/* Job status */}
-      {job && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium ${
-          job.status === "DONE"    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" :
-          job.status === "FAILED"  ? "bg-destructive/10 border-destructive/20 text-destructive" :
-          "bg-primary/10 border-primary/20 text-primary"
-        }`}>
-          {job.status === "DONE"   && <CheckCircle size={16} />}
-          {job.status === "FAILED" && <XCircle size={16} />}
-          {(job.status === "PENDING" || job.status === "RUNNING") && <Loader2 size={16} className="animate-spin" />}
-          Cleaning job: <span className="font-bold">{job.status}</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Missing Value Handling */}
-        <div className="bg-card text-card-foreground border border-border rounded-lg shadow-md p-6 flex flex-col gap-5">
-          <h2 className="text-base font-semibold">Missing Value Handling</h2>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Strategy
-            </label>
-            <select
-              value={config.missing_strategy}
-              onChange={(e) => setConfig({ ...config, missing_strategy: e.target.value as MissingStrategy })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors"
-            >
-              {missingOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-t border-border">
-            <div>
-              <p className="text-sm font-medium">Remove Duplicates</p>
-              <p className="text-xs text-muted-foreground">Drop duplicate rows from dataset</p>
+        {/* Card header: step title + Back/Next buttons */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+              {STEPS[step - 1].icon}
             </div>
-            <button
-              onClick={() => setConfig({ ...config, remove_duplicates: !config.remove_duplicates })}
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                config.remove_duplicates ? "bg-primary" : "bg-border"
-              }`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                config.remove_duplicates ? "translate-x-5" : "translate-x-0"
-              }`} />
-            </button>
+            <div>
+              <h2 className="font-semibold text-sm">
+                Step {step} — {STEPS[step - 1].label}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {STEPS[step - 1].sublabel}
+              </p>
+            </div>
+          </div>
+
+          {/* Back + Next buttons */}
+          <div className="flex items-center gap-2">
+
+            {/* Back button — hidden on step 1 */}
+            {step > 1 && (
+              <button
+                onClick={() => setStep((s) => s - 1)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all"
+              >
+                <ArrowLeft size={14} />
+                Back
+              </button>
+            )}
+
+            {/* Next button — hidden on step 5 */}
+            {step < 5 && (
+              <button
+                onClick={handleNext}
+                disabled={
+                  !canGoNext() ||
+                  saving ||
+                  schemaLoading ||
+                  // On step 4, disable while job is still running
+                  (step === 4 && !!job && job.status !== "ready")
+                }
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {/* Button label changes based on context */}
+                {saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Saving…
+                  </>
+                ) : step === 2 ? (
+                  <>
+                    <Save size={14} />
+                    Save & Review
+                  </>
+                ) : step === 4 && job && (job.status === "pending" || job.status === "cleaning") ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Waiting…
+                  </>
+                ) : (
+                  <>
+                    Next
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Encoding */}
-        <div className="bg-card text-card-foreground border border-border rounded-lg shadow-md p-6 flex flex-col gap-5">
-          <h2 className="text-base font-semibold">Encoding</h2>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Categorical Encoding
-            </label>
-            <select
-              value={config.encoding_method}
-              onChange={(e) => setConfig({ ...config, encoding_method: e.target.value as EncodingMethod })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors"
-            >
-              {encodingOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+        {/* FIX 3: ChevronRight removed — saveError and triggerError banners */}
+        {saveError && (
+          <div className="mx-6 mt-4 flex items-center gap-3 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+            <AlertTriangle size={16} />
+            {saveError}
           </div>
+        )}
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Scaling Method
-            </label>
-            <select
-              value={config.scaling_method}
-              onChange={(e) => setConfig({ ...config, scaling_method: e.target.value as ScalingMethod })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors"
-            >
-              {scalingOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+        {/* FIX 1: trigger error now displayed */}
+        {triggerError && (
+          <div className="mx-6 mt-4 flex items-center gap-3 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+            <AlertTriangle size={16} />
+            {triggerError}
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Version */}
-      <div className="bg-card text-card-foreground border border-border rounded-lg shadow-md p-6">
-        <h2 className="text-base font-semibold mb-4">Pipeline Version</h2>
-        <div className="flex gap-3">
-          {(["V1", "V2"] as CleaningVersion[]).map((v) => (
-            <button
-              key={v}
-              onClick={() => setConfig({ ...config, version: v })}
-              className={`px-6 py-2.5 rounded-lg text-sm font-medium border transition-all ${
-                config.version === v
-                  ? "bg-primary text-white border-primary"
-                  : "bg-background border-border text-muted-foreground hover:border-primary/50"
-              }`}
-            >
-              {v}
-            </button>
-          ))}
+        {/* Step content */}
+        <div className="p-6">
+          {stepContent[step]}
         </div>
       </div>
     </div>
