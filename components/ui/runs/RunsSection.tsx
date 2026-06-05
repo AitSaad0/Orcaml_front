@@ -26,7 +26,9 @@ import {
   Zap,
   Sliders,
   TriangleAlert,
+  FlaskConical,
 } from "lucide-react";
+import PredictModal from "@/components/ui/runs/Predictmodel";
 
 const ALGORITHMS: Algorithm[] = [
   "LOGISTIC_REGRESSION",
@@ -71,7 +73,10 @@ const DEFAULT_HYPERPARAMS: Record<Algorithm, Record<string, unknown>> = {
 const MAX_MANUAL_ATTEMPTS = 5;
 const MAX_ALGOS_PER_BATCH = 6;
 
-interface Props { environmentId: string; }
+interface Props {
+  projectId:     string;
+  environmentId: string;
+}
 
 type FeedbackType = "success" | "error" | "warning";
 interface Feedback { type: FeedbackType; title: string; message: string; }
@@ -194,7 +199,7 @@ function HyperparamForm({ algo, values, onChange }: {
   );
 }
 
-export default function RunsSection({ environmentId }: Props) {
+export default function RunsSection({ projectId, environmentId }: Props) {
   const { token } = useAuth();
 
   const [runs,        setRuns]        = useState<RunResponse[]>([]);
@@ -219,8 +224,9 @@ export default function RunsSection({ environmentId }: Props) {
     { ...DEFAULT_HYPERPARAMS } as Record<Algorithm, Record<string, unknown>>
   );
 
-  const completedRuns = runs.filter((r) => r.status === "COMPLETED");
+  const [selectedPredictRun, setSelectedPredictRun] = useState<RunResponse | null>(null);
 
+  const completedRuns   = runs.filter((r) => r.status === "COMPLETED");
   const regressionCount = completedRuns.filter((r) => r.r2 != null || r.rmse != null).length;
   const classifCount    = completedRuns.filter((r) => r.f1_score != null || r.accuracy != null).length;
 
@@ -369,9 +375,9 @@ export default function RunsSection({ environmentId }: Props) {
                   <button key={algo} onClick={() => toggleAlgo(algo)} disabled={isDisabled}
                     title={isIncompatible ? "Regression only — not compatible with classification" : undefined}
                     className={`px-3 py-2 rounded-[var(--radius-component)] text-xs font-medium border transition-all flex items-center gap-1.5 ${
-                      isSelected    ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]"
+                      isSelected       ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]"
                       : isIncompatible ? "opacity-30 cursor-not-allowed bg-[var(--bg-2)] text-[var(--text-3)] border-dashed border-[var(--border)]"
-                      : isDisabled  ? "opacity-40 cursor-not-allowed bg-[var(--bg-2)] text-[var(--text-3)] border-[var(--border)]"
+                      : isDisabled     ? "opacity-40 cursor-not-allowed bg-[var(--bg-2)] text-[var(--text-3)] border-[var(--border)]"
                       : "bg-transparent text-[var(--text-2)] border-[var(--border)] hover:border-[var(--primary)] hover:text-[var(--foreground)]"
                     }`}>
                     {ALGO_LABELS[algo]}
@@ -509,6 +515,16 @@ export default function RunsSection({ environmentId }: Props) {
                     <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${run.is_manual ? "bg-[var(--bg-3)] text-[var(--text-3)]" : "bg-[#dbeafe] text-[#1d4ed8]"}`}>
                       {run.is_manual ? "manual" : "auto"}
                     </span>
+
+                    {run.status === "COMPLETED" && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedPredictRun(run); }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-component)] text-xs font-medium bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 transition-colors shrink-0"
+                      >
+                        <FlaskConical size={12} /> Predict
+                      </button>
+                    )}
+
                     {(run.status === "PENDING" || run.status === "RUNNING") && (
                       <button onClick={(e) => { e.stopPropagation(); handleCancel(run.id); }} className="text-[var(--text-3)] hover:text-red-500 transition-colors shrink-0">
                         <XCircle size={15} />
@@ -559,6 +575,18 @@ export default function RunsSection({ environmentId }: Props) {
           </div>
         )}
       </div>
+
+      {selectedPredictRun && (
+        <PredictModal
+          open={!!selectedPredictRun}
+          onClose={() => setSelectedPredictRun(null)}
+          projectId={projectId}
+          environmentId={environmentId}
+          runId={selectedPredictRun.id}
+          algorithm={selectedPredictRun.algorithm}
+        />
+      )}
+
     </div>
   );
 }

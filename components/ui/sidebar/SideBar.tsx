@@ -182,9 +182,11 @@ export default function SideBar() {
             Dashboard
           </Link>
 
-          <span className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase">
+          <Link
+          href="/projects"
+           className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase">
             Projects
-          </span>
+          </Link>
 
           {projects.map((project) => {
             const isOpen = openProject === project.id;

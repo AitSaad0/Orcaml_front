@@ -26,8 +26,6 @@ export default function Login() {
     try {
       const token = await loginUser({ email, password });
       await login(token.access_token);
-
-      // Redirige vers la page demandée avant le login, sinon /projects par défaut
       const from = searchParams.get("from") ?? "/dashboard";
       router.push(from);
     } catch (err: unknown) {
@@ -43,37 +41,35 @@ export default function Login() {
       {/* ── GAUCHE ── */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-[#0f0f11] p-14 overflow-hidden relative select-none">
 
+        {/* Ligne dégradé top */}
         <div
           className="absolute top-0 left-0 right-0 h-[1.5px]"
           style={{ background: "linear-gradient(90deg, #6366f1, #818cf8, #14b8a6)" }}
         />
 
+        {/* Orbes */}
         <div className="absolute top-[-120px] left-[-90px] w-[380px] h-[380px] rounded-full bg-[#6366f1]/10 blur-[100px]" />
         <div className="absolute bottom-[-100px] right-[-70px] w-[280px] h-[280px] rounded-full bg-[#14b8a6]/08 blur-[80px]" />
 
-        {/* LOGO */}
-        <div className="relative z-10 text-[16px] font-semibold text-[#3f3f46] tracking-tight">
-          Orca<span className="text-[#71717a]">ML</span>
+        {/* LOGO haut — un seul */}
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-[10px] bg-[#18181b] border border-[#27272f] flex items-center justify-center">
+            <Image
+              src="/logo 1.png"
+              alt="OrcaML Logo"
+              width={26}
+              height={26}
+              className="object-contain"
+              priority
+            />
+          </div>
+          <span className="text-[15px] font-semibold text-[#71717a] tracking-tight">
+            Orca<span className="text-[#a1a1aa]">ML</span>
+          </span>
         </div>
 
         {/* CENTER */}
         <div className="relative z-10 flex flex-col gap-8">
-
-          <div className="flex items-center gap-4">
-            <div className="w-[72px] h-[72px] rounded-[18px] bg-[#18181b] border border-[#27272f] flex items-center justify-center">
-              <Image
-                src="/logo 1.png"
-                alt="OrcaML Logo"
-                width={54}
-                height={54}
-                className="object-contain"
-                priority
-              />
-            </div>
-            <div className="text-[26px] font-bold text-[#f4f4f5] tracking-tight">
-              Orca<span className="text-[#818cf8]">ML</span>
-            </div>
-          </div>
 
           <div className="text-[36px] font-bold text-[#f4f4f5] leading-[1.15] tracking-tight">
             Vos modèles,<br />
@@ -107,7 +103,19 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="relative z-10 w-8 h-px bg-[#27272f]" />
+        {/* Stats bottom */}
+        <div className="relative z-10 flex items-center gap-8 pt-6 border-t border-[#1c1c1f]">
+          {[
+            { value: "100%", label: "Open Source" },
+            { value: "7",    label: "Algorithmes" },
+            { value: "∞",    label: "Projets" },
+          ].map((s) => (
+            <div key={s.label} className="flex flex-col gap-0.5">
+              <span className="text-[18px] font-bold text-[#818cf8]">{s.value}</span>
+              <span className="text-[11px] text-[#3f3f46] font-medium">{s.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── DROITE ── */}
@@ -125,12 +133,16 @@ export default function Login() {
             </p>
           </div>
 
+        
+
+
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
             {/* EMAIL */}
             <div>
-              <label className="block text-[12px] font-semibold text-[var(--text-3)] uppercase tracking-[0.8px] mb-2">
+              <label className="flex items-center gap-1 text-[12px] font-semibold text-[var(--text-3)] uppercase tracking-[0.8px] mb-2">
                 Adresse email
+                <span className="text-red-500 text-[14px] leading-none">*</span>
               </label>
               <div className="flex items-center gap-2 bg-[var(--bg-2)] border border-[var(--border-2)] rounded-[10px] px-4 py-[14px] focus-within:border-[var(--primary)] transition-colors">
                 <input
@@ -147,11 +159,12 @@ export default function Login() {
             {/* PASSWORD */}
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="text-[12px] font-semibold text-[var(--text-3)] uppercase tracking-[0.8px]">
+                <label className="flex items-center gap-1 text-[12px] font-semibold text-[var(--text-3)] uppercase tracking-[0.8px]">
                   Mot de passe
+                  <span className="text-red-500 text-[14px] leading-none">*</span>
                 </label>
-                <Link href="#" className="text-[13px] text-[var(--primary)] hover:opacity-80">
-                  Oublié ?
+                <Link href="#" className="text-[13px] text-[var(--primary)] font-semibold hover:opacity-80">
+                  Mot de passe oublié ?
                 </Link>
               </div>
               <div className="flex items-center gap-2 bg-[var(--bg-2)] border border-[var(--border-2)] rounded-[10px] px-4 py-[14px] focus-within:border-[var(--primary)] transition-colors">
@@ -184,15 +197,20 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-[15px] bg-[var(--primary)] hover:bg-[var(--accent-3)] text-white rounded-[10px] text-[15px] font-semibold flex items-center justify-center gap-2 disabled:opacity-50 mt-1"
+              className="w-full py-[15px] bg-[var(--primary)] hover:bg-[var(--accent-3)] text-white rounded-[10px] text-[15px] font-semibold flex items-center justify-center gap-2 disabled:opacity-50 mt-1 transition-colors"
             >
-              {loading ? "Connexion..." : "Se connecter"}
+              {loading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Connexion...
+                </>
+              ) : "Se connecter"}
             </button>
           </form>
 
           <p className="mt-7 text-center text-[14px] text-[var(--text-3)]">
             Pas encore de compte ?{" "}
-            <Link href="/auth/register" className="text-[var(--primary)] font-semibold">
+            <Link href="/auth/register" className="text-[var(--primary)] font-semibold hover:opacity-80">
               Créer un accès
             </Link>
           </p>

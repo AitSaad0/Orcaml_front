@@ -79,3 +79,42 @@ export async function updatePreferences(
   if (!res.ok) throw new Error("Failed to update preferences");
   return res.json();
 }
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface UserStats {
+  total_projects:    number;
+  total_runs:        number;
+  total_deployments: number;
+}
+
+export type ActivityMap = Record<string, number>; // { "2026-05-20": 3, ... }
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+export async function getStats(token: string): Promise<UserStats> {
+  const res = await fetch(`${API_BASE}/users/me/stats`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to fetch stats");
+  return res.json();
+}
+
+// ─── Activity (runs par jour) ─────────────────────────────────────────────────
+
+export async function getActivity(token: string): Promise<ActivityMap> {
+  const res = await fetch(`${API_BASE}/users/me/activity`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to fetch activity");
+  return res.json();
+}
+
+// ─── Deployment activity (deployments par jour) ───────────────────────────────
+
+export async function getDeploymentActivity(token: string): Promise<ActivityMap> {
+  const res = await fetch(`${API_BASE}/users/me/deployment-activity`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to fetch deployment activity");
+  return res.json();
+}

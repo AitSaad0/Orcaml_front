@@ -11,6 +11,13 @@ export interface Environment {
   total_runs: number;
   total_deployments: number;
 }
+
+export interface ColumnSchema {
+  name: string;
+  type: "number" | "text";
+  sample_values?: string[];
+}
+
 function authHeaders(token: string) {
   return {
     "Content-Type": "application/json",
@@ -37,6 +44,46 @@ export async function getEnvironment(
   });
   if (!res.ok) throw new Error("Failed to fetch environment");
   return res.json();
+}
+
+export async function getEnvironmentColumns(
+  projectId: string,
+  environmentId: string,
+  token: string
+): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/environments/${projectId}/${environmentId}/columns`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {}
+    throw new Error(detail);
+  }
+  const data = await res.json();
+  return data.columns;
+}
+
+export async function getRawDatasetSchema(
+  projectId: string,
+  environmentId: string,
+  token: string
+): Promise<ColumnSchema[]> {
+  const res = await fetch(`${API_BASE}/environments/${projectId}/${environmentId}/columns`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {}
+    throw new Error(detail);
+  }
+  const data = await res.json();
+  return data.schema;
 }
 
 export async function updateEnvironment(

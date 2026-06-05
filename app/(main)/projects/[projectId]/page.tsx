@@ -8,10 +8,10 @@ import { getEnvironments, Environment } from "@/lib/api/environment/api";
 
 export default function ProjectPage({ params }: { params: { projectId: string } }) {
   const { token } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project,      setProject]      = useState<Project | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -40,20 +40,37 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  if (loading) return <div className="flex-1 flex items-center justify-center text-[var(--text-3)] text-sm">Loading...</div>;
-  if (error) return <div className="flex-1 flex items-center justify-center text-[var(--destructive)] text-sm">{error}</div>;
-  if (!project) return <div className="flex-1 flex items-center justify-center text-[var(--text-3)] text-sm">Project not found</div>;
+  // ── FIX : calculer les stats depuis les environments ──
+  const totalRuns        = environments.reduce((sum, env) => sum + (env.total_runs        ?? 0), 0);
+  const totalDeployments = environments.reduce((sum, env) => sum + (env.total_deployments ?? 0), 0);
+  const totalExperiments = environments.length;
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center text-[var(--text-3)] text-sm">
+      Loading...
+    </div>
+  );
+  if (error) return (
+    <div className="flex-1 flex items-center justify-center text-[var(--destructive)] text-sm">
+      {error}
+    </div>
+  );
+  if (!project) return (
+    <div className="flex-1 flex items-center justify-center text-[var(--text-3)] text-sm">
+      Project not found
+    </div>
+  );
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <Projects
         name={project.name}
         projectId={params.projectId}
-        totalExperiments={0}
-        totalDeployments={0}
-        totalRuns={0}
+        totalExperiments={totalExperiments}
+        totalDeployments={totalDeployments}
+        totalRuns={totalRuns}
         environments={environments}
-        onRefresh={fetchData}         // 👈 pass refresh up
+        onRefresh={fetchData}
       />
     </div>
   );

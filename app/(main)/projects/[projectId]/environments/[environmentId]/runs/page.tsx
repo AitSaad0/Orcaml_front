@@ -8,7 +8,10 @@ interface Props {
 export default function RunsPage({ params }: Props) {
   return (
     <EnvironmentPageWrapper>
-      <RunsSection environmentId={params.environmentId} />
+      <RunsSection
+        projectId={params.projectId}
+        environmentId={params.environmentId}
+      />
     </EnvironmentPageWrapper>
   );
 }
