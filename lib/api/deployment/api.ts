@@ -18,7 +18,6 @@ export interface Deployment {
   environment_id: string;
   status: DeploymentStatus;
   endpoint_url: string | null;
-  port: number | null;
   total_calls: number;
   avg_latency_ms: number | null;
   last_called_at: string | null;
