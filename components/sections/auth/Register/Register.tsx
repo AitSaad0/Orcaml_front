@@ -201,7 +201,7 @@ export default function Register() {
           {/* FOOTER */}
           <p className="mt-7 text-center text-[14px] text-[var(--text-3)]">
             Déjà un compte ?{" "}
-            <Link href="/login" className="text-[var(--primary)] font-semibold">
+            <Link href="/auth/login" className="text-[var(--primary)] font-semibold">
               Se connecter
             </Link>
           </p>
