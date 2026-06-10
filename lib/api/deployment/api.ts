@@ -40,6 +40,14 @@ export interface LogsResult {
   logs: string[];
 }
 
+export interface RunForDownload {
+  id: string;
+  mlflow_run_id: string;
+  algorithm: string;
+  finished_at: string | null;
+}
+
+
 function authHeaders(token: string) {
   return {
     "Content-Type": "application/json",
@@ -140,4 +148,35 @@ export async function getLogs(
     throw new Error(err.detail ?? "Failed to fetch logs");
   }
   return res.json();
+}
+
+
+export async function listDownloadableRuns(
+  token: string,
+  environmentId: string
+): Promise<RunForDownload[]> {
+  const res = await fetch(`${baseUrl(environmentId)}/model`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to fetch downloadable runs");
+  return res.json();
+}
+
+export async function downloadModel(
+  token: string,
+  environmentId: string,
+  runId: string
+): Promise<void> {
+  const res = await fetch(
+    `${baseUrl(environmentId)}/model/download?run_id=${runId}`,
+    { headers: authHeaders(token) }
+  );
+  if (!res.ok) throw new Error("Failed to download model");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "model.pkl";
+  a.click();
+  URL.revokeObjectURL(url);
 }

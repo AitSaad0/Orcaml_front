@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Rocket } from "lucide-react";
+import { Rocket, Download, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/auth/AuthContext";
 import EnvironmentPageWrapper from "@/components/ui/environment/EnvironmentPageWrapper";
 import DeploymentStatsBar from "@/components/ui/deployments/DeploymentStatsBar";
 import DeploymentCard from "@/components/ui/deployments/DeploymentCard";
 import DeployModelModal from "@/components/ui/deployments/DeployModelModal";
+import DownloadModelModal from "@/components/ui/deployments/DownloadModelModal";
 import PredictModal from "@/components/ui/deployments/PredictModal";
 import LogsModal from "@/components/ui/deployments/LogsModal";
 import {
@@ -31,6 +32,8 @@ export default function DeploymentsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deployModal, setDeployModal] = useState(false);
+  const [downloadModal, setDownloadModal] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const [predictModal, setPredictModal] = useState<ActiveModal | null>(null);
   const [logsModal, setLogsModal] = useState<ActiveModal | null>(null);
 
@@ -81,13 +84,46 @@ export default function DeploymentsPage({
             Deploy and manage production models
           </p>
         </div>
-        <button
-          onClick={() => setDeployModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Rocket size={15} />
-          Deploy Model
-        </button>
+
+        {/* Split Button */}
+        <div className="relative flex">
+          <button
+            onClick={() => setDeployModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-l-lg bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Rocket size={15} />
+            Deploy Model
+          </button>
+          <button
+            onClick={() => setSplitOpen((v) => !v)}
+            className="px-2 py-2 rounded-r-lg bg-primary text-white border-l border-white/20 hover:opacity-90 transition-opacity"
+          >
+            <ChevronDown size={14} />
+          </button>
+          {splitOpen && (
+            <>
+              {/* Backdrop to close dropdown */}
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setSplitOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 w-44 rounded-lg bg-[var(--card)] border border-[var(--border)] shadow-lg z-20">
+                <button
+                  onClick={() => { setSplitOpen(false); setDeployModal(true); }}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--bg-3)] rounded-t-lg transition-colors"
+                >
+                  <Rocket size={14} /> Deploy Model
+                </button>
+                <button
+                  onClick={() => { setSplitOpen(false); setDownloadModal(true); }}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--bg-3)] rounded-b-lg transition-colors"
+                >
+                  <Download size={14} /> Download Model
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -166,6 +202,12 @@ export default function DeploymentsPage({
         environmentId={params.environmentId}
         onClose={() => setDeployModal(false)}
         onDeployed={fetchDeployments}
+      />
+
+      <DownloadModelModal
+        open={downloadModal}
+        environmentId={params.environmentId}
+        onClose={() => setDownloadModal(false)}
       />
 
       <PredictModal

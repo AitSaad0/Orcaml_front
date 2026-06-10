@@ -183,8 +183,13 @@ export default function SideBar() {
           </Link>
 
           <Link
+<<<<<<< HEAD
           href="/projects"
            className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase">
+=======
+            href="/projects"
+            className="text-xs text-[var(--text-3)] px-3 mt-4 mb-1 font-medium tracking-wider uppercase">
+>>>>>>> 5176441 (feat(deployments): add split button and download model modal)
             Projects
           </Link>
 
